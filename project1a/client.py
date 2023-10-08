@@ -1,5 +1,4 @@
 import socket
-import sys
 import struct
 import random
 
@@ -79,15 +78,20 @@ def get_value(val):
         return " "
 
 def update_game_state(move, game_state, flags):
-    if (flags == 8192):
+    if (flags == (1 << 13)):
         game_state |= X << (move * 2)
-    elif (flags == 4096):
+    elif (flags == (1 << 12)):
         game_state |= O << (move * 2)
     return game_state
 
+def square_filled(game_state, user_input):
+    square_value = (game_state >> (user_input * 2)) & 0b11
+    return square_value != EMPTY
+
 def main():
-    ip_address = "10.10.1.249"
-    port = 7775
+    #get IP address, port, and name of user
+    ip_address = str(input("Enter IP address of server: ")) #10.10.1.249
+    port = int(input("Enter port number: ")) #7775
     addr = (ip_address, port)
     name = str(input("Enter your name: "))
     
@@ -121,17 +125,17 @@ def main():
             print("\nGame Board:")
             create_game_board(game_state)
             
-            #check win
-            if (flags == 2048):
+            #check win condition, tie, or error
+            if (flags == (1 << 11)):
                 print("\nX has won, ending current game")
                 break
-            elif (flags == 1024):
+            elif (flags == (1 << 10)):
                 print("\nO has won, ending current game")
                 break
-            elif (flags == 512):
+            elif (flags == (1 << 9)):
                 print("\nTie, ending current game")
                 break
-            elif (flags == 256):
+            elif (flags == (1 << 8)):
                 print("\nError, stopping current game")
                 break
             #bits 6-13 are filled, reserved for future use
@@ -141,14 +145,20 @@ def main():
                 "3" + " | " + "4" + " | " + "5" + "\n----------\n" + 
                 "6" + " | " + "7" + " | " + "8\n")
             
-            move = int(input("See diagram for board map\nEnter box to play move (0-8): "))
+            move = 0
+            while True:
+                user_input = int(input("See diagram for board map\nEnter box to play move (0-8): "))
+                #check if valid move and if square is already filled
+                if (user_input <= 8 and user_input >= 0 and not square_filled(game_state, user_input)):
+                    move = user_input
+                    break
+                else:
+                    print("Invalid move, try again")
             
             #update game state
             game_state = update_game_state(move, game_state, flags)
-            #print board
-            create_game_board(game_state)
             
-            #increment serial msg id
+            #increment msg id
             msg_id = msg_id_increment(msg_id)
             
             #send data to server
