@@ -3,11 +3,14 @@ import sys
 import struct
 import random
 
-game_id_mask = 0xFFFFFF
-msg_id_mask = 0xFF
-game_flags_mask = 0xFFFC
-game_state_mask = 0xFFFFC
-max_size = 65000
+GAME_ID_MASK = 0xFFFFFF0000000000 #24-bit
+MSG_ID_MASK = 0x000000FF00000000 #8-bit
+GAME_FLAGS_MASK = 0x00000000FFFC0000 #14-bit
+GAME_STATE_MASK = 0x000000000003FFFF #18-bit 
+MAX_SIZE = 65000
+EMPTY = 0b00
+X = 0b01
+O = 0b10
 
 def encode_message(game_id, msg_id, flags, game_state, text=""):
     message = (game_id << 40) | (msg_id << 32) | (flags << 18) | game_state
@@ -17,129 +20,149 @@ def decode_message(received_message):
     message = struct.unpack('!Q', received_message[:8])
     
     text = received_message[8:].decode('utf-8')
-    game_id = (message[0] >> 40) & game_id_mask
-    msg_id = (message[0] >> 32) & msg_id_mask
-    game_flags = (message[0] >> 18) & game_flags_mask
-    game_state = (message[0]) & game_state_mask
+    game_id = (message[0] & GAME_ID_MASK) >> 40
+    msg_id = (message[0] & MSG_ID_MASK) >> 32
+    flags = (message[0] & GAME_FLAGS_MASK) >> 18
+    game_state = (message[0]) & GAME_STATE_MASK
     
-    return game_id, msg_id, game_flags, game_state, text
+    return game_id, msg_id, flags, game_state, text
 
 def msg_id_increment(id_msg):
     if (id_msg == 0xFF):
         id_msg = 0x00
+        return id_msg
     else:
-        id_msg + 1
-    
-def map_board(game_state):
-    r1c1 = game_state & 0x000000000000000011 #0x3
-    r1c2 = game_state & 0x000000000000001100 #0xC
-    r1c2 >> 2
-    r1c3 = game_state & 0x000000000000110000 #0x30
-    r1c3 >> 4
-    r2c1 = game_state & 0x000000000011000000 #0xC0
-    r1c3 >> 6
-    r2c2 = game_state & 0x000000001100000000 #0x300
-    r1c3 >> 8
-    r2c3 = game_state & 0x000000110000000000 #0xC00
-    r1c3 >> 10
-    r3c1 = game_state & 0x000011000000000000 #0x3000
-    r1c3 >> 12
-    r3c2 = game_state & 0x001100000000000000 #0xC000
-    r1c3 >> 14
-    r3c3 = game_state & 0x110000000000000000 #0x30000
-    r1c3 >> 16
-    
-    return [r1c1,r1c2,r1c3,r2c1,r2c2,r2c3,r3c1,r3c2,r3c3]
+        return id_msg + 1
 
-def create_game_board(board):
-    row1: str = get_value(board[0]) + " | " + get_value(board[1]) + " | " + get_value(board[2])
-    row2: str = get_value(board[3]) + " | " + get_value(board[4]) + " | " + get_value(board[5])
-    row3: str = get_value(board[6]) + " | " + get_value(board[7]) + " | " + get_value(board[8])
+def create_game_board(game_state):
+    board_array = []
+    
+    r1c1 = game_state & 0b000000000000000011
+    board_array.append(r1c1)
+    
+    r1c2 = (game_state & 0b000000000000001100) >> 2
+    board_array.append(r1c2)
+    
+    r1c3 = (game_state & 0b000000000000110000) >> 4
+    board_array.append(r1c3)
+    
+    r2c1 = (game_state & 0b000000000011000000) >> 6
+    board_array.append(r2c1)
+    
+    r2c2 = (game_state & 0b000000001100000000) >> 8
+    board_array.append(r2c2)
+    
+    r2c3 = (game_state & 0b000000110000000000) >> 10
+    board_array.append(r2c3)
+    
+    r3c1 = (game_state & 0b000011000000000000) >> 12
+    board_array.append(r3c1)
+    
+    r3c2 = (game_state & 0b001100000000000000) >> 14
+    board_array.append(r3c2)
+    
+    r3c3 = (game_state & 0b110000000000000000) >> 16
+    board_array.append(r3c3)
+    
+    row1: str = get_value(board_array[0]) + " | " + get_value(board_array[1]) + " | " + get_value(board_array[2])
+    row2: str = get_value(board_array[3]) + " | " + get_value(board_array[4]) + " | " + get_value(board_array[5])
+    row3: str = get_value(board_array[6]) + " | " + get_value(board_array[7]) + " | " + get_value(board_array[8])
     
     print(row1 + "\n----------\n" + row2 + "\n----------\n" + row3)
-    
+ 
 def get_value(val):
-    if (val == 0x01):
+    if ((val & 0b11) == 0b01):
         return "X"
-    elif (val == 0x10):
+    elif ((val & 0b11) == 0b10):
         return "O"
-    elif (val == 0x00):
+    else:
         return " "
-    
+
+def update_game_state(move, game_state, flags):
+    if (flags == 8192):
+        game_state |= X << (move * 2)
+    elif (flags == 4096):
+        game_state |= O << (move * 2)
+    return game_state
+
 def main():
-    ip_address = "44.218.223.102"
+    ip_address = "10.10.1.249"
     port = 7775
     addr = (ip_address, port)
+    name = str(input("Enter your name: "))
     
-    run_game = True
-    while run_game:
-        new_game = input("Would you like to play? (y or n) ")
+    tictactoe = True
+    while(tictactoe):
+        #get user name and ask if they want to play
+        run_game = True
+        new_game = input("Hello " + name + ". Would you like to play? (y or n): ")
         if (new_game == 'n'):
             run_game = False
+            tictactoe = False
             break
         
-        client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    
+        #generate random game id
         game_id = random.randint(0, 0xFFFFFF)
         print("Game ID:", game_id)
-        name = input("Enter your name ")
-    
-        msg = encode_message(game_id, 0, 0, 0, name)
-        client_socket.sendto(msg, addr)
         
-        print("Waiting for server...")
-
-        #get data from server
-        raw_data, _ = client_socket.recvfrom(max_size)
+        #create socket and send initial message
+        client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        init_msg = encode_message(game_id, 0, 0, 0, name)
+        client_socket.sendto(init_msg, addr)
+            
+        #receive initial data from server
+        raw_data, _ = client_socket.recvfrom(MAX_SIZE)
         #gather the data and create variables
         game_id, msg_id, flags, game_state, text = decode_message(raw_data)
-        
-        print("Established connection with server")
-        
-        #establish team and which letter to fill squares
-        team = ""
-        if (flags & 0x10):
-            team = "X"
-        elif (flags & 0x01):
-            team = "O"
-        
-        #print the server message
+        print("Server message:")
         print(text)
         
-        if (flags & 0x100):
-            print ("X has won!")
-            break
-        elif (flags & 0x1000):
-            print ("O has won!")
-            break
-        
-        print("0" + " | " + "1" + " | " + "2" + "\n----------\n" + 
-              "3" + " | " + "4" + " | " + "5" + "\n----------\n" + 
-              "6" + " | " + "7" + " | " + "8")
-        move = input("Enter box to play move (0-8)\nSee diagram for board map")
-        if ((game_state >> (move * 2)) != 0x00):
-            print("Invalid move")
+        while run_game:
+            print("\nGame Board:")
+            create_game_board(game_state)
             
-        if (flags & (1 << 0)):
-            game_state |= "X" << (move * 2)
-        else:
-            game_state |= "O" << (move * 2)
-        
-        #update game state
-        
-        
-        #increment serial msg id
-        msg_id_increment(msg_id)
-        
-        msg2 = encode_message(game_id,msg_id,0,game_state)
-        client_socket.sendto(msg2, addr)
+            #check win
+            if (flags == 2048):
+                print("\nX has won, ending current game")
+                break
+            elif (flags == 1024):
+                print("\nO has won, ending current game")
+                break
+            elif (flags == 512):
+                print("\nTie, ending current game")
+                break
+            elif (flags == 256):
+                print("\nError, stopping current game")
+                break
+            #bits 6-13 are filled, reserved for future use
+            
+            print("Diagram:")
+            print("0" + " | " + "1" + " | " + "2" + "\n----------\n" + 
+                "3" + " | " + "4" + " | " + "5" + "\n----------\n" + 
+                "6" + " | " + "7" + " | " + "8\n")
+            
+            move = int(input("See diagram for board map\nEnter box to play move (0-8): "))
+            
+            #update game state
+            game_state = update_game_state(move, game_state, flags)
+            #print board
+            create_game_board(game_state)
+            
+            #increment serial msg id
+            msg_id = msg_id_increment(msg_id)
+            
+            #send data to server
+            msg2 = encode_message(game_id,msg_id,0,game_state,name)
+            client_socket.sendto(msg2, addr)
+            
+            #get data from server
+            raw_data, _ = client_socket.recvfrom(MAX_SIZE)
+            #gather the data and create variables
+            game_id, msg_id, flags, game_state, text = decode_message(raw_data)
+
+            print("\nServer message: "+text)
         
     client_socket.close()
-    
+
 if __name__ == "__main__":
     main()
-    #test_msg = encode_message(111,0,0,0,"hello, world!")
-    #print(test_msg)
-    #test_data = decode_message(test_msg)
-    #print("returned")
-    #print(test_data)
