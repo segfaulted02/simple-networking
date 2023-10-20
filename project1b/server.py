@@ -17,6 +17,7 @@ IP = "127.0.0.1"
 PORT = 5555
 
 games = {}
+lock = threading.Lock()
 threads = ThreadPoolExecutor(max_workers=10)
 
 def encode_message(game_id, msg_id, flags, game_state, text=""):
@@ -25,6 +26,7 @@ def encode_message(game_id, msg_id, flags, game_state, text=""):
 
 def decode_message(received_message):
     message = struct.unpack('!Q', received_message[:8])
+    print(f"DEBUG: {bin(message[0])}")
     
     text = received_message[8:].decode('utf-8')
     game_id = (message[0] & GAME_ID_MASK) >> 40
@@ -42,26 +44,27 @@ def get_value(val):
     else:
         return " "
 
-def update_game_state(move, game_state, flags):
-    if (flags == (1 << 13)):
-        game_state |= X << (move * 2)
-    elif (flags == (1 << 12)):
-        game_state |= O << (move * 2)
-    return game_state
+def update_game_state(move, game_state, player):
+    updated_state = game_state
+    if (player == X):
+        updated_state |= X << (move * 2)
+    elif (player == O):
+        updated_state |= O << (move * 2)
+    return updated_state
 
 def square_filled(game_state, user_input):
     square_value = (game_state >> (user_input * 2)) & 0b11
     return square_value != EMPTY
 
-def calculate_move(game_state, flags):
+def calculate_move(game_state, player):
     moved = False
     while (not moved):
         num = random.randint(0,8)
         if (not square_filled(game_state, num)):
-            update_game_state(num, game_state, flags)
+            game_state = update_game_state(num, game_state, player)
             moved = True
     return game_state
-     
+
 def create_game_board(game_state):
     board_array = []
     
@@ -89,26 +92,32 @@ def create_game_board(game_state):
     
 def check_win(game_state):
     board = create_game_board(game_state)
+    
+    if (game_state == 0):
+        return False, ' '
+    
     #check rows
     for i in range(0,9,3):
         if ((get_value(board[i]) == get_value(board[i+1]) == get_value(board[i+2]))
-            & get_value(board[i]) != " "):
+            and get_value(board[i]) != ' '):
             return True, get_value(board[i])
     #check columns
     for i in range(3):
         if ((get_value(board[i]) == get_value(board[i+3]) == get_value(board[i+6]))
-            & get_value(board[i]) != " "):
+            and get_value(board[i]) != ' '):
             return True, get_value(board[i])
     #check diagonals
     if ((get_value(board[0]) == get_value(board[4]) == get_value(board[8]))
-        & get_value(board[0]) != " "):
+        and get_value(board[0]) != ' '):
         return True, get_value(board[0])
     if ((get_value(board[2]) == get_value(board[4]) == get_value(board[6]))
-        & get_value(board[0]) != " "):
+        and get_value(board[2]) != ' '):
         return True, get_value(board[2])
-    #update flags???
     
-    return False, " "
+    if ' ' not in [get_value(cell) for cell in board]:
+        return True, "Tie!"
+    
+    return False, ' '
 
 def check_valid_game_state(old_state, new_state):
     #check that player changed ONLY 1 bit (too many moves)
@@ -117,130 +126,116 @@ def check_valid_game_state(old_state, new_state):
     while changed_bits:
         count += changed_bits & 1
         changed_bits >>= 1
-    if (count != 1):
-        return False
+    if (count > 1):
+        return True
     
     #check if wrong player moved, I do this by comparing to see if there 
     #are 2 or more X's than O's, or vice versa
     count_01 = 0
     count_10 = 0
-    for i in range(0, new_state.length(), 2):
+    for i in range(0, 18, 2):
         two_bits = (new_state >> i) & 0b11
         if (two_bits == 0b01):
             count_01 += 1
         elif (two_bits == 0b10):
             count_10 += 1
     if (abs(count_01 - count_10) >= 2):
-        return False
+        return True
     
     #check if client played move that was already filled (unavailable location)
     for i in range(9):
         old_square = (old_state >> (i * 2)) & 0b11
         new_square = (new_state >> (i * 2)) & 0b11
-        if (old_square != new_square):
-            if (old_square != EMPTY):
-                return False
-    
-    return True
+        if (old_square != new_square and old_square != EMPTY):
+            return True
+    return False
+
+def check_errors(game_id, msg_id, flags, game_state, games):
+    if ((str(game_id) not in games) and (msg_id !=0) and (game_state !=0) and (flags != 0)):
+        return True, "Error, something is amiss...Game ID not recognized!"
+    elif (msg_id != games[str(game_id)]['msg_id'] + 1):
+        return True, "Error, something is amiss...Msg ID is invalid!"
+    elif (check_valid_game_state(game_state, games[str(game_id)]['game_state'])):
+        return True, "Error, something is amiss...Game state is invalid!"
+    else:
+        return False, ""
 
 def handle_client(data, client_address, server_socket):
     print("Client found and accepted")
     game_id, msg_id, flags, game_state, text = decode_message(data)
     
     #check if game_id doesn't exist in server, then create a new game
-    if ((game_id not in games) & (msg_id == 0) & (game_state == 0) & (flags == 0)):  
+    if ((str(game_id) not in games) and (msg_id == 0) and (game_state == 0) and (flags == 0)):
         text = "Hello " + text + ", a pleasure to play with you.\n"
-        games[game_id] = {
+        games[str(game_id)] = {
+            'game_id': game_id,
             'game_state': game_state,
-            'msg_id': msg_id,
+            'msg_id': random.randint(0,100),
             'flags': flags,
             'player': X if (random.randint(0,1) == 1) else O,
-            'text': text,
+            'text': text
         }
-    #check if game_id doesn't exist in server, if values are not initially 0, return error
-    elif ((game_id not in games) & (msg_id !=0) & (game_state !=0) & (flags != 0)):
-        text = "Error, something is amiss...Game ID not recognized!"
-        flags &= ERROR_FLAG
-        updated_message = encode_message(game_id, 0, flags, 0, text)
-        server_socket.sendto(updated_message, client_address)
-        return
-    #check if msg_id is incorrect
-    elif (msg_id != games[game_id]['msg_id'] + 1):
-        text = "Error, something is amiss...Msg ID is invalid!"
-        flags &= ERROR_FLAG
-        updated_message = encode_message(game_id, 0, flags, 0, text)
-        server_socket.sendto(updated_message, client_address)
-        return
-    #check if game_state is invalid
-    elif (check_valid_game_state(game_state, games[game_id]['game_state'])):
-        text = "Error, something is amiss...Game state is invalid!"
-        flags &= ERROR_FLAG
-        updated_message = encode_message(game_id, 0, flags, 0, text)
-        server_socket.sendto(updated_message, client_address)
-        return
-    #update dictionary with values
     else:
-        games[game_id]['game_state'] = game_state
-        games[game_id]['msg_id'] = msg_id
-        games[game_id]['flags'] = 0
-        games[game_id]['text'] = text
+        #check for errors in the data, if not new data
+        has_error, error_msg = check_errors(game_id, msg_id, flags, game_state, games)
+        if (has_error):
+            flags |= ERROR_FLAG
+            updated_message = encode_message(game_id, msg_id, flags, game_state, error_msg)
+            server_socket.sendto(updated_message, client_address)
+            return
+        #update dictionary with values
+        else:
+            print("is it updating?")
+            print("before: ", games[str(game_id)]['game_state'])
+            print("client gs, ", game_state)
+            games[str(game_id)]['game_state'] = game_state
+            games[str(game_id)]['msg_id'] = msg_id
+            games[str(game_id)]['flags'] = 0
+            games[str(game_id)]['text'] = text
+            print("after: ", games[str(game_id)]['game_state'])
     
-    current_game = games[game_id]
-    print("got here!1")
+    current_game = games[str(game_id)]
     
     #check wins
-    if (check_win(current_game['game_state']) == True, "X"):
+    if (check_win(current_game['game_state']) == (True, 'X')):
         current_game['text'] = "X has won! Ending game"
         print("X has won! Ending game")
-        current_game['flags'] &= 0b100
-        updated_message = encode_message(current_game['game_id'], current_game['msg_id'], 
-                                         current_game['flags'], current_game['game_state'], current_game['text'])
+        current_game['flags'] |= 0b100
+        updated_message = encode_message(current_game['game_id'], current_game['msg_id'], current_game['flags'], current_game['game_state'], current_game['text'])
         server_socket.sendto(updated_message, client_address)
         return
-    elif (check_win(current_game['game_state']) == True, "O"):
+    elif (check_win(current_game['game_state']) == (True, 'O')):
         current_game['text'] = "O has won! Ending game"
         print("O has won! Ending game")
-        current_game['flags'] &= 0b1000
-        updated_message = encode_message(current_game['game_id'], current_game['msg_id'], 
-                                         current_game['flags'], current_game['game_state'], current_game['text'])
+        current_game['flags'] |= 0b1000
+        updated_message = encode_message(current_game['game_id'], current_game['msg_id'], current_game['flags'], current_game['game_state'], current_game['text'])
         server_socket.sendto(updated_message, client_address)
         return
-    elif (check_win(current_game['game_state']) == True, " "):
+    elif (check_win(current_game['game_state']) == (True, "Tie!")):
         current_game['text'] = "Tie! Ending game"
         print("Tie! Ending game")
-        current_game['flags'] &= 0b10000
-        updated_message = encode_message(current_game['game_id'], current_game['msg_id'], 
-                                         current_game['flags'], current_game['game_state'], current_game['text'])
+        current_game['flags'] |= 0b10000
+        updated_message = encode_message(current_game['game_id'], current_game['msg_id'], current_game['flags'], current_game['game_state'], current_game['text'])
         server_socket.sendto(updated_message, client_address)
         return
-
-    print("got here!2")
     
-    #adjust flags for SERVER, then play move
-    if (current_game['player'] == X):
-        current_game['flags'] &= X
-    elif (current_game['player'] == O):
-        current_game['flags'] &= O
-    current_game['game_state'] = calculate_move(current_game['game_state'], current_game['flags'])
-    print("got here!3")
+    #play move, checks if server plays as X or O, and if initial move and O, doesnt move
+    if (not (current_game['game_state'] == 0 and current_game['player'] == O)):
+        current_game['game_state'] = calculate_move(current_game['game_state'], current_game['player'])
     
     #adjust flags and text for PLAYER to send back
     if (current_game['player'] == X):
-        current_game['flags'] &= O
+        current_game['flags'] |= O
         current_game['text'] = "You are O! Play your O!"
     elif (current_game['player'] == O):
-        current_game['flags'] &= X
+        current_game['flags'] |= X
         current_game['text'] = "You are X! Play your X!"
     
     #update msg_id
     current_game['msg_id'] += 1
-    
-    print("got here!4")
-    
-    updated_message = encode_message(current_game['game_id'], current_game['msg_id'], 
-                                     current_game['flags'], current_game['game_state'], current_game['text'])
+
+    updated_message = encode_message(current_game['game_id'], current_game['msg_id'], current_game['flags'], current_game['game_state'], current_game['text'])
     server_socket.sendto(updated_message, client_address)
-    print("got here!5")
 
 def main():
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
@@ -248,7 +243,10 @@ def main():
         print("Server started on 127.0.0.1:5555")
         while True:
             data, address = sock.recvfrom(MAX_SIZE)
-            threads.submit(handle_client, data, address, sock)
+            game_id, msg_id, flags, game_state, text = decode_message(data)
+            print("Before handle: ", bin(game_state))
+            handle_client(data, address, sock)
+            #threads.submit(handle_client, data, address, sock)
 
 if __name__ == "__main__":
     main()
