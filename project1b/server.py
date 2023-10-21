@@ -3,9 +3,7 @@ import struct
 import random
 import threading
 from concurrent.futures import ThreadPoolExecutor
-import copy
 import time
-import sys
 
 GAME_ID_MASK = 0xFFFFFF0000000000 #24-bit
 MSG_ID_MASK = 0x000000FF00000000 #8-bit
