@@ -213,7 +213,7 @@ def handle_client(data, client_address, server_socket):
         #check wins after player moves
         did_win, win_player = check_win(current_game[GAME_STATE_INDEX])
         if (did_win):
-            current_game[TEXT_INDEX] = f"{win_player} has won! Ending game" if "Tie!" else f"{win_player} Ending game"
+            current_game[TEXT_INDEX] = f"{win_player} has won! Ending game" if not "Tie!" else f"{win_player} Ending game"
             current_game[FLAGS_INDEX] = flag_mapping[win_player]
             updated_message = encode_message(current_game[GAME_ID_INDEX], current_game[MSG_ID_INDEX], current_game[FLAGS_INDEX], current_game[GAME_STATE_INDEX], current_game[TEXT_INDEX])
             server_socket.sendto(updated_message, client_address)
@@ -257,7 +257,7 @@ def check_timeout():
             old_games = [x for x, game in games.items() if time.time() - game[TIME_INDEX] >= 300]
             for x in old_games:
                 with game_locks.get(x, threading.Lock()):
-                    print("Timout for game with ID, removing game:", x)
+                    print("Timeout for game with ID, removing game:", x)
                     message = encode_message(games[x][GAME_ID_INDEX], games[x][MSG_ID_INDEX], ERROR_FLAG, games[x][GAME_STATE_INDEX], "Your game has timed out!")
                     sock.sendto(message, games[x][ADDRESS_INDEX])
                     
@@ -269,6 +269,7 @@ def check_timeout():
 def main():
     print("Server started on port 5555")
     
+    #10 threads available for games
     threads = ThreadPoolExecutor(max_workers=10)
     cleanup_thread = threading.Thread(target=check_timeout, daemon=True)
     cleanup_thread.start()
