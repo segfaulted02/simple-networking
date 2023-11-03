@@ -24,21 +24,23 @@ def connect_server(host, port, user_name, targets_list):
         "user_name": f"@{user_name}",
         "targets": formatted_targets
     })
+    print("Initial data sent: ", message)
     connection.send(message.encode('utf-8'))
 
 def send_message(user_name, target, message):
-    formatted_targets = f"{target}" if target.startswith('@') else f"@{target}"
     data = json.dumps({
         "action": "message",
         "user_name": f"@{user_name}",
-        "target": formatted_targets,
+        "target": target,
         "message": message[:3800]
         })
+    print("Data to send: ", data)
     connection.send(data.encode('utf-8'))
     
 def listen():
     while True:
         response = connection.recv(4096).decode('utf-8')
+        print("----------Server Message----------")
         if (response):
             response_data = json.loads(response)
             if (response_data["status"] == "disconnect"):
@@ -54,7 +56,9 @@ def listen():
                 print("Unknown response: ", response_data)
         else:
             print("Server disconnected")
+            print("----------------------------------\n")
             break
+        print("----------------------------------\n")
     
 def main(ip, port):
     user_name = input("Enter your username: ").strip()[:60]

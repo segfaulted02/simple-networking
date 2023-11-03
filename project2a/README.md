@@ -28,4 +28,4 @@ In order to disconnect, simply hit Control-C to disconnect from the server.
 
 ## Grading Notes
 
-Oddly, although the JSON data correctly sends to the server, messages cannot seem to be received from the chatrooms. I do not know the cause for these issues. However, when sending direct messages, it all works as intended.
+Oddly, messages cannot seem to be received from the chatrooms. However, when sending direct messages, it all works as intended.  I also know that my JSON messages are sending and being formatted correctly, since they work with direct messages, and I double checked the messages sent when wanting to send to a chatroom, and they are correct. I believe this is a server issue.
