@@ -24,6 +24,8 @@ To send to an individual user:
 Hello Chad! @chad
 ```
 
-In order to disconnect, simply hit Contrl-C to disconnect from the server.
+In order to disconnect, simply hit Control-C to disconnect from the server.
 
 ## Grading Notes
+
+Oddly, although the JSON data correctly sends to the server, messages cannot seem to be received from the chatrooms. I do not know the cause for these issues. However, when sending direct messages, it all works as intended.
