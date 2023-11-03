@@ -8,13 +8,16 @@ from typing import List
 
 connection = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-def signal_handler():
-    disconnect_msg = json.dumps({"action": "disconnect"})
-    connection.send(disconnect_msg.encode('utf-8'))
-    print("\nKeyboard Interrupt, disconnecting\n")
-    sys.exit(0)
-
-#signal.signal(signal.SIGINT, signal_handler)
+def exit():
+    try:
+        disconnect_msg = json.dumps({"action": "disconnect"})
+        connection.send(disconnect_msg.encode('utf-8'))
+        print("\nKeyboard Interrupt, disconnecting\n")
+        connection.close()
+    except Exception as e:
+        print("Unknown error when disconnecting", e)
+    finally:
+        sys.exit(0)
 
 def connect_server(host, port, user_name, targets_list):
     connection.connect((host, port))
@@ -38,26 +41,27 @@ def send_message(user_name, target, message):
     
 def listen():
     while True:
-        response = connection.recv(4096).decode('utf-8')
-        print("----------Server Message----------")
-        if (response):
-            response_data = json.loads(response)
-            if (response_data["status"] == "disconnect"):
-                print("Server is shutting down, disconnecting")
-                return
-            elif (response_data["status"] == "error"):
-                print("Error from server: ", response_data["message"])
-            elif (response_data["status"] == "chat"):
-                for msg in response_data["history"]:
-                    new_msg = ast.literal_eval(msg)
-                    print("Message from: ", new_msg["from"], " to ", new_msg["target"], ": ", new_msg["message"])
+        try:
+            response = connection.recv(4096).decode('utf-8')
+            print("----------Server Message----------")
+            if (response):
+                response_data = json.loads(response)
+                if (response_data["status"] == "disconnect"):
+                    print("Server is shutting down, disconnecting")
+                    return
+                elif (response_data["status"] == "error"):
+                    print("Error from server: ", response_data["message"])
+                elif (response_data["status"] == "chat"):
+                    for msg in response_data["history"]:
+                        new_msg = ast.literal_eval(msg)
+                        print("Message from: ", new_msg["from"], " to ", new_msg["target"], ": ", new_msg["message"])
+                else:
+                    print("Unknown response: ", response_data)
             else:
-                print("Unknown response: ", response_data)
-        else:
-            print("Server disconnected")
+                print("Server disconnected")
             print("----------------------------------\n")
-            sys.exit(0)
-        print("----------------------------------\n")
+        except Exception as e:
+            break
     
 def main(ip, port):
     user_name = input("Enter your username: ").strip()[:60]
@@ -82,12 +86,9 @@ def main(ip, port):
                 else:
                     print("Invalid input\n")
             except KeyboardInterrupt as e:
-                raise
+                exit()
     except KeyboardInterrupt as e:
-        signal_handler()
-    finally:
-        connection.close()
-        sys.exit(0)
+        exit()
         
 if __name__ == "__main__":
     if (len(sys.argv) != 3):
