@@ -3,6 +3,9 @@ In order to run the client, in bash terminal type in:
 
 ```bash
 python3 client.py <address> <port>
+
+#Example
+python3 client.py compnet.cs.du.edu 7775
 ```
 
 ## Using the client
