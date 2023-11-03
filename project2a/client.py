@@ -8,12 +8,13 @@ from typing import List
 
 connection = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-def signal_handler(num, frame):
+def signal_handler():
     disconnect_msg = json.dumps({"action": "disconnect"})
     connection.send(disconnect_msg.encode('utf-8'))
+    print("\nKeyboard Interrupt, disconnecting\n")
     sys.exit(0)
 
-signal.signal(signal.SIGINT, signal_handler)
+#signal.signal(signal.SIGINT, signal_handler)
 
 def connect_server(host, port, user_name, targets_list):
     connection.connect((host, port))
@@ -24,7 +25,6 @@ def connect_server(host, port, user_name, targets_list):
         "user_name": f"@{user_name}",
         "targets": formatted_targets
     })
-    print("Initial data sent: ", message)
     connection.send(message.encode('utf-8'))
 
 def send_message(user_name, target, message):
@@ -34,7 +34,6 @@ def send_message(user_name, target, message):
         "target": target,
         "message": message[:3800]
         })
-    print("Data to send: ", data)
     connection.send(data.encode('utf-8'))
     
 def listen():
@@ -57,37 +56,38 @@ def listen():
         else:
             print("Server disconnected")
             print("----------------------------------\n")
-            break
+            sys.exit(0)
         print("----------------------------------\n")
     
 def main(ip, port):
     user_name = input("Enter your username: ").strip()[:60]
     initial_targets = input("Enter the chat room(s) to listen to, separated by spaces: ").strip().split()
+        
+    connect_server(ip, port, user_name, initial_targets)
+    print("Connected to server\n")
     
+    receive_thread = threading.Thread(target=listen, daemon=True)
+    receive_thread.start()
+        
     try:
-        connect_server(ip, port, user_name, initial_targets)
-        print("Connected to server\n")
-        
-        receive_thread = threading.Thread(target=listen, daemon=True)
-        receive_thread.start()
-        
         while True:
-            print("\nTo send a message, enter your message followed by the user or chat room")
-            print("Example 1: Hello world! #networking")
-            print("Example 2: Hello chad! @chad\n")
-            message = input().strip()
-            split = message.rsplit(' ', 1)
-            
-            if (len(split) == 2 and (split[1].startswith('@') or split[1].startswith('#'))):
-                message, target = split
-                send_message(user_name, target, message)
-            else:
-                print("Invalid input\n")
-    except KeyboardInterrupt:
-        disconnect_msg = json.dumps({"action":"disconnect"})
-        print("Disconnected from server, keyboard kill")
+            try:
+                print("To send a message, enter your message followed by the user or chat room")
+                message = input().strip()
+                split = message.rsplit(' ', 1)
+                
+                if (len(split) == 2 and (split[1].startswith('@') or split[1].startswith('#'))):
+                    message, target = split
+                    send_message(user_name, target, message)
+                else:
+                    print("Invalid input\n")
+            except KeyboardInterrupt as e:
+                raise
+    except KeyboardInterrupt as e:
+        signal_handler()
     finally:
         connection.close()
+        sys.exit(0)
         
 if __name__ == "__main__":
     if (len(sys.argv) != 3):
