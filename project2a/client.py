@@ -38,7 +38,7 @@ def send_message(user_name, target, message):
         "message": message[:3800]
         })
     connection.send(data.encode('utf-8'))
-    
+
 def listen():
     while True:
         try:
@@ -58,11 +58,11 @@ def listen():
                 else:
                     print("Unknown response: ", response_data)
             else:
-                print("Server disconnected")
+                print("Server is acting goofy ", response)
             print("----------------------------------\n")
         except Exception as e:
             break
-    
+
 def main(ip, port):
     user_name = input("Enter your username: ").strip()[:60]
     initial_targets = input("Enter the chat room(s) to listen to, separated by spaces: ").strip().split()
@@ -75,21 +75,18 @@ def main(ip, port):
         
     try:
         while True:
-            try:
-                print("To send a message, enter your message followed by the user or chat room")
-                message = input().strip()
-                split = message.rsplit(' ', 1)
-                
-                if (len(split) == 2 and (split[1].startswith('@') or split[1].startswith('#'))):
-                    message, target = split
-                    send_message(user_name, target, message)
-                else:
-                    print("Invalid input\n")
-            except KeyboardInterrupt as e:
-                exit()
+            print("To send a message, enter your message followed by the user or chat room")
+            message = input().strip()
+            split = message.rsplit(' ', 1)
+            
+            if (len(split) == 2 and (split[1].startswith('@') or split[1].startswith('#'))):
+                message, target = split
+                send_message(user_name, target, message)
+            else:
+                print("Invalid input\n")
     except KeyboardInterrupt as e:
         exit()
-        
+
 if __name__ == "__main__":
     if (len(sys.argv) != 3):
         print("Incorrect format")
