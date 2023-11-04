@@ -3,14 +3,19 @@ import socket
 import sys
 import threading
 import ast
+import signal
 
 connection = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+listening = True
 
 def exit():
+    global listening
+    listening = False
     try:
         disconnect_msg = json.dumps({"action": "disconnect"})
         connection.send(disconnect_msg.encode('utf-8'))
         print("\nKeyboard Interrupt, disconnecting\n")
+        connection.shutdown(socket.SHUT_RDWR)
         connection.close()
     except Exception as e:
         print("Unknown error when disconnecting", e)
@@ -38,7 +43,8 @@ def send_message(user_name, target, message):
     connection.send(data.encode('utf-8'))
 
 def listen():
-    while True:
+    global listening
+    while listening:
         try:
             response = connection.recv(4096).decode('utf-8')
             print("----------Server Message----------")
@@ -56,15 +62,15 @@ def listen():
                 else:
                     print("Unknown response: ", response_data)
             else:
-                print("Server is acting goofy ", response)
+                pass
             print("----------------------------------\n")
         except Exception as e:
+            print(e)
             break
 
 def main(ip, port):
     user_name = input("Enter your username: ").strip()[:60]
     initial_targets = input("Enter the chat room(s) to listen to, separated by spaces: ").strip().split()
-        
     connect_server(ip, port, user_name, initial_targets)
     print("Connected to server\n")
     
@@ -86,7 +92,11 @@ def main(ip, port):
         exit()
 
 if __name__ == "__main__":
-    if (len(sys.argv) != 3):
-        print("Incorrect format")
-    else:
-        main(sys.argv[1], int(sys.argv[2]))
+    try:
+        signal.signal(signal.SIGINT, lambda sig, frame: exit())
+        if (len(sys.argv) != 3):
+            print("Incorrect format")
+        else:
+            main(sys.argv[1], int(sys.argv[2]))
+    except KeyboardInterrupt:
+        exit()
