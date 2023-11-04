@@ -52,7 +52,7 @@ def listen():
                 response_data = json.loads(response)
                 if (response_data["status"] == "disconnect"):
                     print("Server is shutting down, disconnecting")
-                    return
+                    exit()
                 elif (response_data["status"] == "error"):
                     print("Error from server: ", response_data["message"])
                 elif (response_data["status"] == "chat"):
