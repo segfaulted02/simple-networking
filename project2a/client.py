@@ -1,10 +1,8 @@
 import json
 import socket
 import sys
-import signal
 import threading
 import ast
-from typing import List
 
 connection = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
