@@ -63,6 +63,7 @@ def main(ip, port):
                             if sock in clients:
                                 del clients[sock]
                             inputs.remove(sock)
+                            sock.send(json.dumps({"status": "disconnect"}).encode('utf-8'))
                             sock.close()
                         
                         for message in messages:
