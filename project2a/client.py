@@ -57,7 +57,11 @@ def listen():
                     print("Error from server: ", response_data["message"])
                 elif (response_data["status"] == "chat"):
                     for msg in response_data["history"]:
-                        new_msg = ast.literal_eval(msg)
+                        # The line below was the quickfix due to an error in compnet.cs.du.edu server code,
+                        # Once the server's bug was fixed, I changed this line, which works with both my server
+                        # and the compnet.cs.du.edu server code.
+                        #new_msg = ast.literal_eval(msg)
+                        new_msg = msg
                         print("Message from: ", new_msg["from"], " to ", new_msg["target"], ": ", new_msg["message"])
                 else:
                     print("Unknown response: ", response_data)
@@ -65,7 +69,7 @@ def listen():
                 pass
             print("----------------------------------\n")
         except Exception as e:
-            print(e)
+            print("ERROR!!!!", e)
             break
 
 def main(ip, port):
