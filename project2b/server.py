@@ -7,7 +7,7 @@ clients = {}
 messages = []
 
 def send_message(client, message):
-    if (message['target'] == clients[client]['user_name']):
+    if ((message['target'] == clients[client]['user_name']) or (message['target'] in clients[client]['targets'])):
         data = json.dumps({
             "status": "chat",
             "history": [
@@ -19,19 +19,7 @@ def send_message(client, message):
             ]
         })
         client.send(data.encode('utf-8'))
-    elif (message['target'] in clients[client]['targets']):
-        data = json.dumps({
-            "status": "chat",
-            "history": [
-                {
-                    "target": message['target'],
-                    "from": message['user_name'],
-                    "message": message['message']
-                }
-            ]
-        })
-        client.send(data.encode('utf-8'))
-        
+
 def receive(connection):
     data = connection.recv(4096).decode('utf-8')
     return json.loads(data)
